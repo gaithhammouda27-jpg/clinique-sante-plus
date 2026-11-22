@@ -6,6 +6,15 @@ from pathlib import Path
 # Racine du dépôt : .../clinique-sante-plus
 ROOT_DIR = Path(__file__).resolve().parent.parent
 
+# Charge le fichier .env (clés API de l'assistant, etc.) s'il existe.
+# Il est ignoré par git : les clés ne sont jamais publiées.
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(ROOT_DIR / ".env")
+except ImportError:  # python-dotenv optionnel : variables d'environnement classiques
+    pass
+
 DATABASE_URL = os.getenv(
     "CLINIQUE_DATABASE_URL",
     f"sqlite:///{(ROOT_DIR / 'clinique.db').as_posix()}",

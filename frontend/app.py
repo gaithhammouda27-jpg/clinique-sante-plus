@@ -63,18 +63,13 @@ def tenter_connexion(email: str, password: str) -> None:
     else:
         st.error(f"Erreur serveur : {api.error_detail(response)}")
 
-CLINIQUE = {
-    "nom": "Clinique Santé+",
-    "adresse": "Avenue Habib Bourguiba, Mahdia, Tunisie",
-    "telephone": "(+216) 73 680 000",
-    "urgences": "(+216) 73 680 911 (24h/7j)",
-    "email": "contact@cliniquesante.tn",
-    "horaires": [
-        ("Lundi - Vendredi", "08:00 - 19:00"),
-        ("Samedi", "08:00 - 14:00"),
-        ("Dimanche & Urgences", "Service Permanent 24h/24")
-    ]
-}
+from clinic_info import CLINIQUE  # noqa: E402  (source unique, partagée avec la navbar)
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def charger_stats_publiques():
+    """KPI réels de l'accueil (avant : valeurs codées en dur)."""
+    return api.get_json("/stats/public", default=None)
 
 # Plus de redirection automatique quand on est connecté : elle rendait le
 # lien « Portail d'Accueil » de la sidebar inutilisable (retour immédiat).
@@ -177,11 +172,15 @@ with c_hero_btn2:
     elif st.button("⚡ Démonstration Immédiate", width="stretch"):
         st.session_state["show_login"] = True
         st.rerun()
+stats = charger_stats_publiques() or {}
+
 with c_hero_stat:
-    render_clean_html("""
+    nb_patients = stats.get("patients", "—")
+    auc = stats.get("auc_modele_hypertension")
+    render_clean_html(f"""
 <div style="display:flex;align-items:center;justify-content:flex-end;gap:24px;height:100%;padding-right:10px;color:#94A3B8;font-size:0.82rem;">
-<div><b style="color:#00F2FE;font-size:1.1rem;">1 000+</b> Patients Suivis</div>
-<div><b style="color:#10B981;font-size:1.1rem;">~78%</b> Précision AUC Modèle</div>
+<div><b style="color:#00F2FE;font-size:1.1rem;">{nb_patients}</b> Patients Suivis</div>
+<div><b style="color:#10B981;font-size:1.1rem;">{f"{auc:.0%}" if auc else "—"}</b> AUC Modèle IA</div>
 <div><b style="color:#38BDF8;font-size:1.1rem;">24/7</b> Service Urgences</div>
 </div>
 """)
@@ -189,57 +188,59 @@ with c_hero_stat:
 render_clean_html("<div style='height:15px;'></div>")
 
 # ------------------------------------------------------------
-# 4. CARTE DES MÉTRIQUES CLÉS DU SYSTÈME (KPIs LUMINEUX)
+# 4. CARTE DES MÉTRIQUES CLÉS DU SYSTÈME (données réelles de la base)
 # ------------------------------------------------------------
-col_kpi1, col_kpi2, col_kpi3, col_kpi4 = st.columns(4)
+if not stats:
+    st.info("Indicateurs indisponibles : l'API n'est pas démarrée.")
+else:
+    col_kpi1, col_kpi2, col_kpi3, col_kpi4 = st.columns(4)
 
-with col_kpi1:
-    render_metric_card(
-        title="Capacité d'Accueil",
-        value="48",
-        unit="Lits",
-        delta="+8 lits ajoutés",
-        delta_positive=True,
-        icon="🛏️",
-        color="teal",
-        subtitle="Services Médecine & Soins Intensifs"
-    )
+    with col_kpi1:
+        render_metric_card(
+            title="Capacité d'Accueil",
+            value=stats["lits_total"],
+            unit="Lits",
+            icon="🛏️",
+            color="teal",
+            subtitle=f"{stats['lits_disponibles']} lit(s) disponible(s) actuellement",
+        )
 
-with col_kpi2:
-    render_metric_card(
-        title="Précision Diagnostic IA",
-        value="78.2",
-        unit="%",
-        delta="+3.4% vs baseline",
-        delta_positive=True,
-        icon="🧠",
-        color="cyan",
-        subtitle="Random Forest Spark MLlib (Hypertension)"
-    )
+    with col_kpi2:
+        render_metric_card(
+            title="Performance Modèle IA",
+            value=f"{stats['auc_modele_hypertension'] * 100:.0f}",
+            unit="% AUC",
+            icon="🧠",
+            color="cyan",
+            subtitle="Random Forest Spark MLlib (hypertension)",
+        )
 
-with col_kpi3:
-    render_metric_card(
-        title="Consultations Mensuelles",
-        value="385",
-        unit="Actes",
-        delta="+14.2% ce mois",
-        delta_positive=True,
-        icon="🩺",
-        color="emerald",
-        subtitle="Suivi ambulatoire & spécialités"
-    )
+    with col_kpi3:
+        mois, precedent = stats["consultations_mois"], stats["consultations_mois_precedent"]
+        evolution = None
+        if precedent:
+            evolution = (mois - precedent) / precedent * 100
+        render_metric_card(
+            title="Consultations ce mois",
+            value=mois,
+            unit="Actes",
+            delta=f"{evolution:+.0f}% vs mois précédent" if evolution is not None else None,
+            delta_positive=(evolution or 0) >= 0,
+            icon="🩺",
+            color="emerald",
+            subtitle=f"{stats['consultations_total']} consultations au total",
+        )
 
-with col_kpi4:
-    render_metric_card(
-        title="Satisfaction Patient",
-        value="4.7",
-        unit="/ 5",
-        delta="+0.3 pt",
-        delta_positive=True,
-        icon="⭐",
-        color="amber",
-        subtitle="Basé sur 120 avis certifiés"
-    )
+    with col_kpi4:
+        moyenne = stats.get("satisfaction_moyenne")
+        render_metric_card(
+            title="Satisfaction Patient",
+            value=f"{moyenne:.1f}" if moyenne is not None else "—",
+            unit="/ 5",
+            icon="⭐",
+            color="amber",
+            subtitle=f"Basé sur {stats['satisfaction_avis']} avis",
+        )
 
 render_clean_html("<div style='height:25px;'></div>")
 

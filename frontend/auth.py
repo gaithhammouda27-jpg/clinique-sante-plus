@@ -44,6 +44,18 @@ def logout():
         del st.session_state[key]
 
 
+def require_login():
+    """Bloque la page si personne n'est connecté (tous rôles acceptés)."""
+    if st.session_state.get("logged_in") and normalize_role(st.session_state.get("role")) in ROLE_PAGES:
+        return
+    st.error("⛔ Accès refusé : veuillez vous connecter.")
+    if st.button("🔐 Aller à la page de connexion", type="primary"):
+        logout()
+        st.session_state["show_login"] = True
+        st.switch_page("app.py")
+    st.stop()
+
+
 def require_role(role: str):
     """Bloque la page si l'utilisateur n'est pas connecté avec le bon rôle."""
     if st.session_state.get("logged_in") and normalize_role(st.session_state.get("role")) == role:

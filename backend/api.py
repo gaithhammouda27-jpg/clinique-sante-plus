@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timedelta
 import shutil
 import os
 import uuid
@@ -2502,6 +2502,36 @@ def _analytics_status_distribution(rows, attribute):
     ]
 
 
+@app.get("/stats/public")
+def statistiques_publiques(db: Session = Depends(get_db)):
+    """Chiffres agrégés (aucune donnée personnelle) pour la page d'accueil.
+
+    Remplace les KPI codés en dur (48 lits, 385 actes, 4.7/5…) de l'accueil.
+    """
+    maintenant = datetime.now()
+    mois = maintenant.strftime("%Y-%m")
+    premier_du_mois = maintenant.replace(day=1)
+    mois_precedent = (premier_du_mois - timedelta(days=1)).strftime("%Y-%m")
+
+    consultations = [c.date_consultation or "" for c in db.query(database.Consultation.date_consultation).all()]
+    notes = [n for (n,) in db.query(database.SatisfactionPatient.note).all()]
+    lits = [s for (s,) in db.query(database.Lit.statut).all()]
+
+    return {
+        "patients": db.query(database.Patient).count(),
+        "medecins": db.query(database.Utilisateur).filter(database.Utilisateur.role == "medecin").count(),
+        "lits_total": len(lits),
+        "lits_disponibles": sum(1 for s in lits if s == "disponible"),
+        "consultations_mois": sum(1 for d in consultations if d.startswith(mois)),
+        "consultations_mois_precedent": sum(1 for d in consultations if d.startswith(mois_precedent)),
+        "consultations_total": len(consultations),
+        "satisfaction_moyenne": round(sum(notes) / len(notes), 2) if notes else None,
+        "satisfaction_avis": len(notes),
+        # AUC mesurée par ml/scripts/train_model.py sur le jeu de test
+        "auc_modele_hypertension": 0.78,
+    }
+
+
 @app.get("/analytics/dashboard")
 def analytics_dashboard(db: Session = Depends(get_db)):
 
@@ -2990,3 +3020,45 @@ def supprimer_lit(
     except Exception:
         db.rollback()
         raise HTTPException(400, "Erreur lors de la suppression")
+
+# ==========================================
+# ASSISTANT IA (fournisseur gratuit : Groq / Gemini / OpenRouter / Ollama)
+# ==========================================
+class AssistantMessage(BaseModel):
+    role: str
+    content: str
+
+
+class AssistantRequete(BaseModel):
+    user_id: int
+    messages: list[AssistantMessage]
+
+
+@app.get("/assistant/status")
+def statut_assistant():
+    from backend.assistant import configuration
+
+    cfg = configuration()
+    return {
+        "configure": bool(cfg["api_key"]),
+        "fournisseur": cfg["label"],
+        "modele": cfg["model"],
+    }
+
+
+@app.post("/assistant/chat")
+def discuter_assistant(data: AssistantRequete, db: Session = Depends(get_db)):
+    from backend.assistant import discuter
+
+    # Le rôle vient de la BASE, pas du client : on ne peut pas se déclarer admin.
+    user = db.query(database.Utilisateur).filter(database.Utilisateur.id == data.user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+    if not data.messages or data.messages[-1].role != "user":
+        raise HTTPException(status_code=400, detail="Le dernier message doit venir de l'utilisateur.")
+
+    resultat = discuter(db, [m.model_dump() for m in data.messages], user.id, (user.role or "").lower())
+    if "erreur" in resultat:
+        code = 503 if resultat["erreur"] in ("non_configure", "connexion") else 502
+        raise HTTPException(status_code=code, detail=resultat["message"])
+    return resultat

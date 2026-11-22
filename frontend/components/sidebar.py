@@ -84,6 +84,12 @@ def render_sidebar(name, role):
             width="stretch"
         )
 
+        st.page_link(
+            "pages/5_Assistant.py",
+            label="🤖 Assistant IA",
+            width="stretch"
+        )
+
         render_clean_html("""
 <div style="height:1px;background:rgba(255,255,255,0.08);margin:20px 0;"></div>
 <div style="color:#94A3B8;font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;">Sécurité</div>

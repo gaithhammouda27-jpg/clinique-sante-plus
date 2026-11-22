@@ -12,6 +12,7 @@ facturation, pharmacie et infrastructure, avec un module d'**aide au diagnostic*
 | **Médecin** | Planning, diagnostic IA, dossier patient (documents, ordonnances, consultations, évolution) |
 | **Secrétariat** | Prise et modification de RDV, création de dossiers patients, annuaire, facturation |
 | **Patient** | Rendez-vous, historique IA, ordonnances, bilan de santé |
+| **Tous** | Assistant IA conversationnel sur les données de la clinique |
 
 ## 🏗️ Architecture
 
@@ -21,12 +22,13 @@ clinique-sante-plus/
 │   ├── api.py               routes REST
 │   ├── database.py          modèles SQLAlchemy
 │   ├── ia_service.py        prédictions Spark (chargement paresseux)
+│   ├── assistant.py         assistant IA (Groq / Gemini / Ollama) + outils par rôle
 │   ├── security.py          hachage des mots de passe (bcrypt)
 │   ├── config.py            chemins + variables d'environnement
 │   └── seed_data.py         données et comptes de démonstration
 ├── frontend/                Interface Streamlit
 │   ├── app.py               accueil + connexion
-│   ├── pages/               un fichier par rôle (Admin, Médecin, Secrétaire, Patient)
+│   ├── pages/               un fichier par rôle + page Assistant IA
 │   ├── components/          cartes, graphiques, en-tête, navbar, sidebar
 │   ├── api_client.py        client HTTP commun (URL configurable, timeouts)
 │   ├── auth.py              session, garde d'accès par rôle, déconnexion
@@ -88,6 +90,36 @@ Créés par `python -m backend.seed_data` (mot de passe : `Demo2026!`, modifiabl
 | Médecin | dr.martin@clinique.com |
 | Secrétaire | secretaire@clinique.com |
 | Patient | jean.dupont@email.com |
+
+## 🤖 Assistant IA (gratuit)
+
+Page **« 🤖 Assistant IA »** (lien dans la barre latérale, ou bouton « IA Clinique » de l'accueil).
+Il répond en langage naturel à partir des **vraies données** de la clinique, avec des outils en
+lecture seule filtrés par rôle :
+
+| Rôle | Peut consulter |
+|---|---|
+| Admin | statistiques, rendez-vous, patients, dossiers, pharmacie, **finances**, lits, médecins |
+| Médecin | ses rendez-vous, patients, dossiers, pharmacie, lits, médecins |
+| Secrétaire | rendez-vous, recherche de patients, lits, médecins (pas les dossiers médicaux) |
+| Patient | **ses** rendez-vous et **son** dossier uniquement, annuaire des médecins |
+
+Le rôle est vérifié **dans la base**, pas déclaré par le navigateur.
+
+**Activer l'assistant (2 minutes)** :
+1. Créez une clé gratuite sur https://console.groq.com/keys (sans carte bancaire).
+2. Copiez `.env.example` en `.env` à la racine et renseignez `GROQ_API_KEY=...`.
+3. Redémarrez l'API (`.\run_api.ps1`).
+
+Autres fournisseurs (même code, API compatible OpenAI) : **Google Gemini**
+(`ASSISTANT_PROVIDER=gemini` + `GEMINI_API_KEY`), **OpenRouter** (modèles `:free`) ou
+**Ollama** en local, sans clé ni Internet (`ASSISTANT_PROVIDER=ollama`).
+`ASSISTANT_MODEL` permet de choisir un autre modèle.
+
+> ⚠️ Les offres gratuites envoient les questions à un service externe (et Gemini gratuit peut
+> les utiliser pour s'améliorer) : n'utilisez que des **données fictives**. Pour de vraies
+> données de santé, préférez Ollama en local.
+> Le fichier `.env` est ignoré par git : la clé n'est jamais publiée.
 
 ## ⚙️ Configuration
 

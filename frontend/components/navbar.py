@@ -3,7 +3,74 @@ Barre de navigation supérieure cinématique pour la Clinique Santé+.
 """
 
 import streamlit as st
+
+import api_client as api
+from clinic_info import CLINIQUE
 from style import render_clean_html
+
+
+def _nom_propre(nom: str) -> str:
+    return str(nom or "").replace("[TEST]", "").strip()
+
+
+@st.dialog("🩺 Nos services médicaux", width="large")
+def dialogue_services():
+    """Services et médecins réels, lus depuis l'API (avant : simple toast statique)."""
+    services = api.get_json("/services-medicaux/", default=None)
+    medecins = api.get_json("/medecins/annuaire", default=[]) or []
+
+    if services is None:
+        st.error("Impossible de contacter l'API pour charger les services.")
+        return
+    if not services:
+        st.info("Aucun service médical n'est encore enregistré.")
+    for s in services:
+        statut = "🟢 Actif" if s.get("statut") == "actif" else f"⚪ {s.get('statut')}"
+        st.markdown(f"**{_nom_propre(s['nom'])}** — {statut} · capacité {s.get('capacite') or 0} patients")
+        if s.get("description"):
+            st.caption(_nom_propre(s["description"]))
+
+    if medecins:
+        st.divider()
+        st.markdown("**👨‍⚕️ Nos médecins**")
+        for m in medecins:
+            st.markdown(f"- {m['nom_complet']} — {m.get('specialite') or 'Généraliste'}")
+
+
+@st.dialog("🧠 Intelligence artificielle clinique", width="large")
+def dialogue_ia():
+    """Présente les modèles et l'assistant, avec un raccourci vers l'assistant."""
+    st.markdown(
+        "- **Prédiction du risque** d'hypertension et de diabète : modèles Random Forest "
+        "(Spark MLlib), AUC ≈ 0.78, entraînés sur 1 000 dossiers synthétiques.\n"
+        "- **Assistant IA** : pose des questions en langage naturel sur les rendez-vous, "
+        "les patients, la pharmacie ou les finances (selon votre rôle)."
+    )
+    statut = api.get_json("/assistant/status", default=None)
+    if statut and statut.get("configure"):
+        st.success(f"Assistant connecté : {statut['fournisseur']} · {statut['modele']}")
+    else:
+        st.warning("Assistant non configuré : ajoute une clé API gratuite dans le fichier .env (voir README).")
+    st.caption("⚠️ Aide à la décision uniquement : ne remplace pas l'avis d'un médecin.")
+
+    if st.session_state.get("logged_in"):
+        if st.button("🤖 Ouvrir l'assistant IA", type="primary", width="stretch"):
+            st.switch_page("pages/5_Assistant.py")
+    else:
+        if st.button("🔐 Se connecter pour utiliser l'assistant", type="primary", width="stretch"):
+            st.session_state["show_login"] = True
+            st.switch_page("app.py")
+
+
+@st.dialog("📞 Nous contacter")
+def dialogue_contact():
+    st.markdown(f"📍 **Adresse** : {CLINIQUE['adresse']}")
+    st.markdown(f"☎️ **Standard** : {CLINIQUE['telephone']}")
+    st.markdown(f"🚨 **Urgences** : {CLINIQUE['urgences']}")
+    st.markdown(f"✉️ **E-mail** : [{CLINIQUE['email']}](mailto:{CLINIQUE['email']})")
+    st.divider()
+    for jour, heures in CLINIQUE["horaires"]:
+        st.markdown(f"🕒 **{jour}** : {heures}")
 
 
 def afficher_navbar():
@@ -29,15 +96,15 @@ def afficher_navbar():
             
     with col3:
         if st.button("🩺 Services", width="stretch"):
-            st.toast("Nos spécialités : Cardiologie, Diabétologie, Urgences, Laboratoire & Imagerie.")
-            
+            dialogue_services()
+
     with col4:
         if st.button("🧠 IA Clinique", width="stretch"):
-            st.toast("Modèles Spark MLlib prédictifs pour l'hypertension et le diabète connectés.")
-            
+            dialogue_ia()
+
     with col5:
         if st.button("📞 Contact", width="stretch"):
-            st.toast("Clinique Santé+ • Mahdia, Tunisie • Urgences 24/7 : (+216) 73 000 000")
+            dialogue_contact()
 
     with col6:
         if not st.session_state.get("logged_in"):
