@@ -1182,35 +1182,30 @@ with tab_hospital:
 </div>
 """, unsafe_allow_html=True)
 
-    nav1, nav2, nav3, nav4, nav5, nav6, nav7 = st.columns(7)
+    # Avant : 7 boutons qui modifiaient st.session_state["infra_section"]
+    # sans que cette valeur soit jamais lue -> aucun effet.
+    INFRA_SECTIONS = {
+        "tout": "🗂️ Tout",
+        "indicateurs": "📊 Indicateurs",
+        "occupation": "🛏️ Occupation",
+        "graphiques": "📈 Graphiques",
+        "services": "🏥 Services",
+        "salles": "🚪 Salles",
+        "lits": "🛏️ Lits",
+        "resume": "📋 Résumé",
+    }
+    infra_section = st.segmented_control(
+        "Section",
+        options=list(INFRA_SECTIONS),
+        format_func=INFRA_SECTIONS.get,
+        default="tout",
+        key="infra_section",
+        label_visibility="collapsed",
+    ) or "tout"
 
-    with nav1:
-        if st.button("📊 Indicateurs", key="nav_infra_1"):
-            st.session_state["infra_section"] = "indicateurs"
+    def infra_visible(section):
+        return infra_section in ("tout", section)
 
-    with nav2:
-        if st.button("🛏️ Occupation", key="nav_infra_2"):
-            st.session_state["infra_section"] = "occupation"
-
-    with nav3:
-        if st.button("📈 Graphiques", key="nav_infra_3"):
-            st.session_state["infra_section"] = "graphiques"
-
-    with nav4:
-        if st.button("🏥 Services", key="nav_infra_4"):
-            st.session_state["infra_section"] = "services"
-
-    with nav5:
-        if st.button("🚪 Salles", key="nav_infra_5"):
-            st.session_state["infra_section"] = "salles"
-
-    with nav6:
-        if st.button("🛏️ Lits", key="nav_infra_6"):
-            st.session_state["infra_section"] = "lits"
-
-    with nav7:
-        if st.button("📋 Résumé", key="nav_infra_7"):
-            st.session_state["infra_section"] = "resume"
 
     # ==========================================================
     # 1. RECUPERATION DES DONNEES
@@ -1444,506 +1439,514 @@ with tab_hospital:
             salles_preparees
         )
 
-        # ======================================================
-        # 4. CARTES KPI
-        # ======================================================
+        if infra_visible("indicateurs"):
+            # ======================================================
+            # 4. CARTES KPI
+            # ======================================================
 
-        st.markdown("### 📊 Indicateurs principaux")
+            st.markdown("### 📊 Indicateurs principaux")
 
-        k1, k2, k3, k4 = st.columns(4)
+            k1, k2, k3, k4 = st.columns(4)
 
-        k1.metric(
-            "Services médicaux",
-            total_services
-        )
+            k1.metric(
+                "Services médicaux",
+                total_services
+            )
 
-        k2.metric(
-            "Salles médicales",
-            total_salles
-        )
+            k2.metric(
+                "Salles médicales",
+                total_salles
+            )
 
-        k3.metric(
-            "Total des lits",
-            total_lits
-        )
+            k3.metric(
+                "Total des lits",
+                total_lits
+            )
 
-        k4.metric(
-            "Hospitalisations en cours",
-            int(hospitalisations_en_cours)
-        )
+            k4.metric(
+                "Hospitalisations en cours",
+                int(hospitalisations_en_cours)
+            )
 
-        k5, k6, k7, k8 = st.columns(4)
+            k5, k6, k7, k8 = st.columns(4)
 
-        k5.metric(
-            "Lits disponibles",
-            lits_disponibles
-        )
+            k5.metric(
+                "Lits disponibles",
+                lits_disponibles
+            )
 
-        k6.metric(
-            "Lits occupés",
-            lits_occupes
-        )
-
-        k7.metric(
-            "En maintenance",
-            lits_maintenance
-        )
-
-        k8.metric(
-            "Taux d'occupation",
-            f"{taux_occupation:.1f}%"
-        )
-
-        st.divider()
-
-        # ======================================================
-        # 5. TAUX D'OCCUPATION ET DISPONIBILITE
-        # ======================================================
-
-        st.markdown("### 🛏️ Occupation et disponibilité")
-
-        gauche, droite = st.columns(2)
-
-        with gauche:
-
-            st.markdown("**Taux d'occupation**")
-
-            st.metric(
+            k6.metric(
                 "Lits occupés",
+                lits_occupes
+            )
+
+            k7.metric(
+                "En maintenance",
+                lits_maintenance
+            )
+
+            k8.metric(
+                "Taux d'occupation",
                 f"{taux_occupation:.1f}%"
             )
 
-            st.progress(
-                min(max(taux_occupation / 100, 0), 1)
-            )
+            st.divider()
 
-        with droite:
+        if infra_visible("occupation"):
+            # ======================================================
+            # 5. TAUX D'OCCUPATION ET DISPONIBILITE
+            # ======================================================
 
-            st.markdown("**Taux de disponibilité**")
+            st.markdown("### 🛏️ Occupation et disponibilité")
 
-            st.metric(
-                "Lits disponibles",
-                f"{taux_disponibilite:.1f}%"
-            )
+            gauche, droite = st.columns(2)
 
-            st.progress(
-                min(max(taux_disponibilite / 100, 0), 1)
-            )
+            with gauche:
 
-        # ======================================================
-        # 6. GRAPHIQUES DE REPARTITION
-        # ======================================================
+                st.markdown("**Taux d'occupation**")
 
-        st.divider()
-        st.markdown("### 📈 Analyses graphiques")
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-
-            repartition = pd.DataFrame({
-                "Statut": [
-                    "Disponibles",
-                    "Occupés",
-                    "Maintenance",
-                    "Autres"
-                ],
-                "Nombre": [
-                    lits_disponibles,
-                    lits_occupes,
-                    lits_maintenance,
-                    lits_autres
-                ]
-            })
-
-            repartition = repartition[
-                repartition["Nombre"] > 0
-            ]
-
-            if not repartition.empty:
-
-                fig = px.pie(
-                    repartition,
-                    names="Statut",
-                    values="Nombre",
-                    hole=0.55,
-                    title="Répartition des lits",
-                    color="Statut",
-                    color_discrete_map={
-                        "Disponibles": "#16A34A",
-                        "Occupés": "#DC2626",
-                        "Maintenance": "#F59E0B",
-                        "Autres": "#64748B"
-                    }
+                st.metric(
+                    "Lits occupés",
+                    f"{taux_occupation:.1f}%"
                 )
 
-                fig.update_traces(
-                    textinfo="percent+label"
+                st.progress(
+                    min(max(taux_occupation / 100, 0), 1)
                 )
 
-                afficher_graphique(fig)
+            with droite:
 
-            else:
-                show_empty("Aucun lit enregistré.")
+                st.markdown("**Taux de disponibilité**")
 
-        with col2:
-
-            if not df_salles_detail.empty:
-
-                fig = px.bar(
-                    df_salles_detail,
-                    x="nom",
-                    y=["disponibles", "occupes", "maintenance"],
-                    title="État des lits par salle",
-                    labels={
-                        "value": "Nombre de lits",
-                        "nom": "Salle",
-                        "variable": "Statut"
-                    },
-                    barmode="stack",
-                    color_discrete_map={
-                        "disponibles": "#16A34A",
-                        "occupes": "#DC2626",
-                        "maintenance": "#F59E0B"
-                    }
+                st.metric(
+                    "Lits disponibles",
+                    f"{taux_disponibilite:.1f}%"
                 )
 
-                afficher_graphique(fig)
-
-            else:
-                show_empty("Aucune salle enregistrée.")
-
-        # ======================================================
-        # 7. COMPARAISON DES SERVICES
-        # ======================================================
-
-        st.markdown("### 🏥 Comparaison entre les services")
-
-        if not df_salles_detail.empty:
-
-            services_stats = (
-                df_salles_detail
-                .groupby("service", as_index=False)
-                .agg(
-                    salles=("id", "count"),
-                    capacite=("capacite", "sum"),
-                    lits=("total_lits", "sum"),
-                    occupes=("occupes", "sum"),
-                    disponibles=("disponibles", "sum"),
-                    maintenance=("maintenance", "sum")
+                st.progress(
+                    min(max(taux_disponibilite / 100, 0), 1)
                 )
-            )
 
-            services_stats["taux_occupation"] = (
-                services_stats["occupes"]
-                / services_stats["lits"].replace(0, pd.NA)
-                * 100
-            ).fillna(0)
+        if infra_visible("graphiques"):
+            # ======================================================
+            # 6. GRAPHIQUES DE REPARTITION
+            # ======================================================
+
+            st.divider()
+            st.markdown("### 📈 Analyses graphiques")
 
             col1, col2 = st.columns(2)
 
             with col1:
 
-                fig = px.bar(
-                    services_stats,
-                    x="service",
-                    y=["occupes", "disponibles"],
-                    barmode="group",
-                    title="Lits occupés et disponibles par service",
-                    labels={
-                        "service": "Service",
-                        "value": "Nombre de lits",
-                        "variable": "Statut"
-                    },
-                    color_discrete_map={
-                        "occupes": "#DC2626",
-                        "disponibles": "#16A34A"
-                    }
-                )
+                repartition = pd.DataFrame({
+                    "Statut": [
+                        "Disponibles",
+                        "Occupés",
+                        "Maintenance",
+                        "Autres"
+                    ],
+                    "Nombre": [
+                        lits_disponibles,
+                        lits_occupes,
+                        lits_maintenance,
+                        lits_autres
+                    ]
+                })
 
-                afficher_graphique(fig)
+                repartition = repartition[
+                    repartition["Nombre"] > 0
+                ]
+
+                if not repartition.empty:
+
+                    fig = px.pie(
+                        repartition,
+                        names="Statut",
+                        values="Nombre",
+                        hole=0.55,
+                        title="Répartition des lits",
+                        color="Statut",
+                        color_discrete_map={
+                            "Disponibles": "#16A34A",
+                            "Occupés": "#DC2626",
+                            "Maintenance": "#F59E0B",
+                            "Autres": "#64748B"
+                        }
+                    )
+
+                    fig.update_traces(
+                        textinfo="percent+label"
+                    )
+
+                    afficher_graphique(fig)
+
+                else:
+                    show_empty("Aucun lit enregistré.")
 
             with col2:
 
-                fig = px.bar(
-                    services_stats,
-                    x="service",
-                    y="capacite",
-                    text="capacite",
-                    title="Capacité totale par service",
-                    labels={
-                        "service": "Service",
-                        "capacite": "Capacité"
-                    },
-                    color="service"
+                if not df_salles_detail.empty:
+
+                    fig = px.bar(
+                        df_salles_detail,
+                        x="nom",
+                        y=["disponibles", "occupes", "maintenance"],
+                        title="État des lits par salle",
+                        labels={
+                            "value": "Nombre de lits",
+                            "nom": "Salle",
+                            "variable": "Statut"
+                        },
+                        barmode="stack",
+                        color_discrete_map={
+                            "disponibles": "#16A34A",
+                            "occupes": "#DC2626",
+                            "maintenance": "#F59E0B"
+                        }
+                    )
+
+                    afficher_graphique(fig)
+
+                else:
+                    show_empty("Aucune salle enregistrée.")
+
+        if infra_visible("services"):
+            # ======================================================
+            # 7. COMPARAISON DES SERVICES
+            # ======================================================
+
+            st.markdown("### 🏥 Comparaison entre les services")
+
+            if not df_salles_detail.empty:
+
+                services_stats = (
+                    df_salles_detail
+                    .groupby("service", as_index=False)
+                    .agg(
+                        salles=("id", "count"),
+                        capacite=("capacite", "sum"),
+                        lits=("total_lits", "sum"),
+                        occupes=("occupes", "sum"),
+                        disponibles=("disponibles", "sum"),
+                        maintenance=("maintenance", "sum")
+                    )
                 )
 
-                afficher_graphique(fig)
+                services_stats["taux_occupation"] = (
+                    services_stats["occupes"]
+                    / services_stats["lits"].replace(0, pd.NA)
+                    * 100
+                ).fillna(0)
+
+                col1, col2 = st.columns(2)
+
+                with col1:
+
+                    fig = px.bar(
+                        services_stats,
+                        x="service",
+                        y=["occupes", "disponibles"],
+                        barmode="group",
+                        title="Lits occupés et disponibles par service",
+                        labels={
+                            "service": "Service",
+                            "value": "Nombre de lits",
+                            "variable": "Statut"
+                        },
+                        color_discrete_map={
+                            "occupes": "#DC2626",
+                            "disponibles": "#16A34A"
+                        }
+                    )
+
+                    afficher_graphique(fig)
+
+                with col2:
+
+                    fig = px.bar(
+                        services_stats,
+                        x="service",
+                        y="capacite",
+                        text="capacite",
+                        title="Capacité totale par service",
+                        labels={
+                            "service": "Service",
+                            "capacite": "Capacité"
+                        },
+                        color="service"
+                    )
+
+                    afficher_graphique(fig)
+
+                st.dataframe(
+                    services_stats,
+                    width="stretch",
+                    hide_index=True
+                )
+
+        if infra_visible("services"):
+            # ======================================================
+            # 8. TABLEAU COMPLET DES SERVICES
+            # ======================================================
+
+            st.divider()
+            st.markdown("### 📋 Tous les services médicaux")
+
+            colonnes = [
+                "id", "nom", "description",
+                "capacite", "statut"
+            ]
 
             st.dataframe(
-                services_stats,
+                df_services[colonnes],
                 width="stretch",
                 hide_index=True
             )
 
-        # ======================================================
-        # 8. TABLEAU COMPLET DES SERVICES
-        # ======================================================
+        if infra_visible("salles"):
+            # ======================================================
+            # 9. TABLEAU ET BADGES DES SALLES
+            # ======================================================
 
-        st.divider()
-        st.markdown("### 📋 Tous les services médicaux")
+            st.divider()
+            st.markdown("### 🚪 État détaillé des salles")
 
-        colonnes = [
-            "id", "nom", "description",
-            "capacite", "statut"
-        ]
+            couleurs = {
+                "Disponible": "#16A34A",
+                "Complète": "#DC2626",
+                "Partiellement occupée": "#D97706",
+                "Maintenance": "#D97706",
+                "À équiper": "#64748B",
+                "Indisponible": "#64748B"
+            }
 
-        st.dataframe(
-            df_services[colonnes],
-            width="stretch",
-            hide_index=True
-        )
+            if not df_salles_detail.empty:
 
-        # ======================================================
-        # 9. TABLEAU ET BADGES DES SALLES
-        # ======================================================
+                for service in df_salles_detail["service"].unique():
 
-        st.divider()
-        st.markdown("### 🚪 État détaillé des salles")
+                    st.markdown(f"#### 🏥 {service}")
 
-        couleurs = {
-            "Disponible": "#16A34A",
-            "Complète": "#DC2626",
-            "Partiellement occupée": "#D97706",
-            "Maintenance": "#D97706",
-            "À équiper": "#64748B",
-            "Indisponible": "#64748B"
-        }
+                    salles_service = df_salles_detail[
+                        df_salles_detail["service"] == service
+                    ]
 
-        if not df_salles_detail.empty:
+                    colonnes_salles = st.columns(2)
 
-            for service in df_salles_detail["service"].unique():
+                    for index, (_, salle) in enumerate(
+                        salles_service.iterrows()
+                    ):
 
-                st.markdown(f"#### 🏥 {service}")
+                        with colonnes_salles[index % 2]:
 
-                salles_service = df_salles_detail[
-                    df_salles_detail["service"] == service
-                ]
-
-                colonnes_salles = st.columns(2)
-
-                for index, (_, salle) in enumerate(
-                    salles_service.iterrows()
-                ):
-
-                    with colonnes_salles[index % 2]:
-
-                        couleur = couleurs.get(
-                            salle["statut"],
-                            "#64748B"
-                        )
-
-                        statut_html = html.escape(
-                            salle["statut"]
-                        )
-
-                        nom_html = html.escape(
-                            str(salle["nom"])
-                        )
-
-                        with st.container(border=True):
-
-                            render_clean_html(
-                                f"""
-                                <div style="
-                                    display:flex;
-                                    justify-content:space-between;
-                                    align-items:center;
-                                    gap:8px;
-                                    flex-wrap:wrap;
-                                ">
-                                    <b>🚪 {nom_html}</b>
-                                    <span style="
-                                        background:{couleur};
-                                        color:white;
-                                        padding:4px 10px;
-                                        border-radius:20px;
-                                        font-size:12px;
-                                        font-weight:600;
-                                    ">{statut_html}</span>
-                                </div>
-                                """
+                            couleur = couleurs.get(
+                                salle["statut"],
+                                "#64748B"
                             )
 
-                            st.caption(
-                                f"ID : {salle['id']} | "
-                                f"Type : {salle['type']}"
+                            statut_html = html.escape(
+                                salle["statut"]
                             )
 
-                            a, b, c = st.columns(3)
-
-                            a.metric(
-                                "Capacité",
-                                int(salle["capacite"])
+                            nom_html = html.escape(
+                                str(salle["nom"])
                             )
 
-                            b.metric(
-                                "Occupés",
-                                int(salle["occupes"])
-                            )
+                            with st.container(border=True):
 
-                            c.metric(
-                                "Disponibles",
-                                int(salle["disponibles"])
-                            )
+                                render_clean_html(
+                                    f"""
+                                    <div style="
+                                        display:flex;
+                                        justify-content:space-between;
+                                        align-items:center;
+                                        gap:8px;
+                                        flex-wrap:wrap;
+                                    ">
+                                        <b>🚪 {nom_html}</b>
+                                        <span style="
+                                            background:{couleur};
+                                            color:white;
+                                            padding:4px 10px;
+                                            border-radius:20px;
+                                            font-size:12px;
+                                            font-weight:600;
+                                        ">{statut_html}</span>
+                                    </div>
+                                    """
+                                )
 
-                            st.caption(
-                                f"Lits enregistrés : "
-                                f"{int(salle['total_lits'])} / "
-                                f"{int(salle['capacite'])}"
-                            )
+                                st.caption(
+                                    f"ID : {salle['id']} | "
+                                    f"Type : {salle['type']}"
+                                )
 
-        else:
-            show_empty("Aucune salle enregistrée.")
+                                a, b, c = st.columns(3)
 
-        # ======================================================
-        # 10. DETAIL DE TOUS LES LITS
-        # ======================================================
+                                a.metric(
+                                    "Capacité",
+                                    int(salle["capacite"])
+                                )
 
-        st.divider()
-        st.markdown("### 🛏️ Inventaire détaillé des lits")
+                                b.metric(
+                                    "Occupés",
+                                    int(salle["occupes"])
+                                )
 
-        if not df_lits.empty:
+                                c.metric(
+                                    "Disponibles",
+                                    int(salle["disponibles"])
+                                )
 
-            service_filtre = st.selectbox(
-                "Filtrer par service",
-                ["Tous les services"] +
-                list(df_services["nom"].dropna().unique()),
-                key="infra_filtre_service"
-            )
+                                st.caption(
+                                    f"Lits enregistrés : "
+                                    f"{int(salle['total_lits'])} / "
+                                    f"{int(salle['capacite'])}"
+                                )
 
-            df_lits_affichage = df_lits.copy()
+            else:
+                show_empty("Aucune salle enregistrée.")
 
-            # Association lit -> salle -> service
-            df_lits_affichage = df_lits_affichage.merge(
-                df_salles[
-                    ["id", "id_service", "nom"]
-                ].rename(columns={
-                    "id": "id_salle",
-                    "nom": "nom_salle"
-                }),
-                on="id_salle",
-                how="left"
-            )
+        if infra_visible("lits"):
+            # ======================================================
+            # 10. DETAIL DE TOUS LES LITS
+            # ======================================================
 
-            df_lits_affichage["service"] = (
-                df_lits_affichage["id_service"].map(
-                    noms_services
+            st.divider()
+            st.markdown("### 🛏️ Inventaire détaillé des lits")
+
+            if not df_lits.empty:
+
+                service_filtre = st.selectbox(
+                    "Filtrer par service",
+                    ["Tous les services"] +
+                    list(df_services["nom"].dropna().unique()),
+                    key="infra_filtre_service"
                 )
-            )
 
-            if service_filtre != "Tous les services":
+                df_lits_affichage = df_lits.copy()
 
-                df_lits_affichage = df_lits_affichage[
-                    df_lits_affichage["service"] == service_filtre
-                ]
+                # Association lit -> salle -> service
+                df_lits_affichage = df_lits_affichage.merge(
+                    df_salles[
+                        ["id", "id_service", "nom"]
+                    ].rename(columns={
+                        "id": "id_salle",
+                        "nom": "nom_salle"
+                    }),
+                    on="id_salle",
+                    how="left"
+                )
 
-            for _, lit in df_lits_affichage.iterrows():
+                df_lits_affichage["service"] = (
+                    df_lits_affichage["id_service"].map(
+                        noms_services
+                    )
+                )
 
-                statut = infra_statut(lit["statut"])
+                if service_filtre != "Tous les services":
 
-                if statut in ["disponible", "libre"]:
-                    couleur = "#16A34A"
-                    libelle = "Disponible"
+                    df_lits_affichage = df_lits_affichage[
+                        df_lits_affichage["service"] == service_filtre
+                    ]
 
-                elif statut in ["occupe", "occupé"]:
-                    couleur = "#DC2626"
-                    libelle = "Occupé"
+                for _, lit in df_lits_affichage.iterrows():
 
-                elif statut in ["maintenance", "hors_service"]:
-                    couleur = "#D97706"
-                    libelle = "Maintenance"
+                    statut = infra_statut(lit["statut"])
 
-                else:
-                    couleur = "#64748B"
-                    libelle = str(lit["statut"])
+                    if statut in ["disponible", "libre"]:
+                        couleur = "#16A34A"
+                        libelle = "Disponible"
 
-                render_clean_html(
-                    f"""
-                    <div style="
-                        border:1px solid rgba(128,128,128,.3);
-                        border-radius:9px;
-                        padding:10px 14px;
-                        margin-bottom:7px;
-                        display:flex;
-                        justify-content:space-between;
-                        align-items:center;
-                        flex-wrap:wrap;
-                        gap:8px;
-                    ">
-                        <span>
-                            🛏️ <b>{html.escape(str(lit['numero']))}</b>
-                            <small>
-                                — {html.escape(str(lit['service']))}
-                                / {html.escape(str(lit['nom_salle']))}
-                            </small>
-                        </span>
-                        <span style="
-                            background:{couleur};
-                            color:white;
-                            border-radius:20px;
-                            padding:4px 10px;
-                            font-size:12px;
-                            font-weight:600;
+                    elif statut in ["occupe", "occupé"]:
+                        couleur = "#DC2626"
+                        libelle = "Occupé"
+
+                    elif statut in ["maintenance", "hors_service"]:
+                        couleur = "#D97706"
+                        libelle = "Maintenance"
+
+                    else:
+                        couleur = "#64748B"
+                        libelle = str(lit["statut"])
+
+                    render_clean_html(
+                        f"""
+                        <div style="
+                            border:1px solid rgba(128,128,128,.3);
+                            border-radius:9px;
+                            padding:10px 14px;
+                            margin-bottom:7px;
+                            display:flex;
+                            justify-content:space-between;
+                            align-items:center;
+                            flex-wrap:wrap;
+                            gap:8px;
                         ">
-                            {html.escape(libelle)}
-                        </span>
-                    </div>
-                    """
-                )
+                            <span>
+                                🛏️ <b>{html.escape(str(lit['numero']))}</b>
+                                <small>
+                                    — {html.escape(str(lit['service']))}
+                                    / {html.escape(str(lit['nom_salle']))}
+                                </small>
+                            </span>
+                            <span style="
+                                background:{couleur};
+                                color:white;
+                                border-radius:20px;
+                                padding:4px 10px;
+                                font-size:12px;
+                                font-weight:600;
+                            ">
+                                {html.escape(libelle)}
+                            </span>
+                        </div>
+                        """
+                    )
 
-        else:
-            show_empty("Aucun lit enregistré.")
+            else:
+                show_empty("Aucun lit enregistré.")
 
-        # ======================================================
-        # 11. RESUME FINAL
-        # ======================================================
+        if infra_visible("resume"):
+            # ======================================================
+            # 11. RESUME FINAL
+            # ======================================================
 
-        st.divider()
-        st.markdown("### 📊 Résumé général")
+            st.divider()
+            st.markdown("### 📊 Résumé général")
 
-        resume = pd.DataFrame({
-            "Indicateur": [
-                "Services médicaux",
-                "Salles médicales",
-                "Capacité théorique des salles",
-                "Lits enregistrés",
-                "Lits occupés",
-                "Lits disponibles",
-                "Lits en maintenance",
-                "Taux d'occupation",
-                "Taux de disponibilité",
-                "Hospitalisations en cours"
-            ],
-            "Valeur": [
-                total_services,
-                total_salles,
-                int(df_salles["capacite"].sum()),
-                total_lits,
-                lits_occupes,
-                lits_disponibles,
-                lits_maintenance,
-                f"{taux_occupation:.1f}%",
-                f"{taux_disponibilite:.1f}%",
-                int(hospitalisations_en_cours)
-            ]
-        })
+            resume = pd.DataFrame({
+                "Indicateur": [
+                    "Services médicaux",
+                    "Salles médicales",
+                    "Capacité théorique des salles",
+                    "Lits enregistrés",
+                    "Lits occupés",
+                    "Lits disponibles",
+                    "Lits en maintenance",
+                    "Taux d'occupation",
+                    "Taux de disponibilité",
+                    "Hospitalisations en cours"
+                ],
+                "Valeur": [
+                    total_services,
+                    total_salles,
+                    int(df_salles["capacite"].sum()),
+                    total_lits,
+                    lits_occupes,
+                    lits_disponibles,
+                    lits_maintenance,
+                    f"{taux_occupation:.1f}%",
+                    f"{taux_disponibilite:.1f}%",
+                    int(hospitalisations_en_cours)
+                ]
+            })
 
-        st.dataframe(
-            resume,
-            width="stretch",
-            hide_index=True
-        )
+            st.dataframe(
+                resume,
+                width="stretch",
+                hide_index=True
+            )
 
 
 

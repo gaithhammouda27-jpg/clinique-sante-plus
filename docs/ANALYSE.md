@@ -91,3 +91,28 @@ Voir le README pour l'arborescence complète.
    Dockerfile/docker-compose pour lancer API + frontend en une commande.
 10. **RGPD / données de santé** : journaliser les accès aux dossiers, chiffrer les documents
     uploadés, ne jamais commiter `clinique.db` ni `uploads/` (désormais dans `.gitignore`).
+
+## 5. Deuxième passe : boutons et assistant IA (22/11/2026)
+
+### Boutons qui n'avaient aucun effet
+- **Admin › Infrastructure** : les 7 boutons (Indicateurs, Occupation, Graphiques, Services,
+  Salles, Lits, Résumé) écrivaient `infra_section` sans que la valeur soit jamais lue. Ils
+  affichent désormais chacun leur section (+ « Tout »).
+- **Navbar « Services », « IA Clinique », « Contact »** : simple toast statique (avec un numéro
+  d'urgence différent de celui de l'accueil). Ils ouvrent maintenant des fenêtres avec les
+  services et médecins réels (API), l'état de l'assistant IA et les coordonnées (source unique
+  `frontend/clinic_info.py`).
+- **KPI de l'accueil** (48 lits, 385 consultations, 4.7/5…) : valeurs inventées → nouvelle route
+  `GET /stats/public` (chiffres agrégés réels, aucune donnée personnelle).
+
+### Vérification du backend
+- Les 41 routes GET répondent (2 « 404 » attendus : aucun document ni ligne d'ordonnance en base).
+- Les 22 actions d'écriture déclenchées par les boutons (création/modification/suppression de
+  patients, RDV, factures, ordonnances, consultations, documents, utilisateurs, paiement, refus
+  des doubles réservations) ont été testées sur une **copie** de la base : 22/22 OK.
+
+### Assistant IA
+- `backend/assistant.py` + routes `GET /assistant/status` et `POST /assistant/chat`,
+  page `frontend/pages/5_Assistant.py`. Fournisseur gratuit configurable (Groq par défaut).
+- 8 outils en lecture seule, filtrés par rôle ; rôle lu en base.
+- Testé de bout en bout avec un fournisseur simulé (pas de clé réelle disponible lors des tests).

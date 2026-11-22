@@ -12,5 +12,9 @@ plotly>=5.20
 pandas>=2.1
 requests>=2.31
 
+# --- Assistant IA (Groq / Gemini / OpenRouter / Ollama via l'API compatible OpenAI) ---
+openai>=1.40
+python-dotenv>=1.0       # lit les clés API dans .env
+
 # --- IA (optionnel : nécessite Java 17) ---
 pyspark>=3.5
