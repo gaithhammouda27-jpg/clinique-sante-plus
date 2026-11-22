@@ -1,0 +1,35 @@
+﻿# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Environnements virtuels
+.venv/
+venv/
+env/
+
+# Fichiers sensibles
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+
+# Bases de données locales
+*.db
+*.sqlite
+*.sqlite3
+
+# Éditeurs
+.vscode/
+.idea/
+
+# Fichiers système
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Cache
+.pytest_cache/
+.mypy_cache/
