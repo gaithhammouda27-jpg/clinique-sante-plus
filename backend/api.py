@@ -2,32 +2,40 @@ from fastapi import FastAPI, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from datetime import datetime
-import database
-from passlib.context import CryptContext
 import shutil
 import os
 import uuid
 import json
-import os
 from fastapi.responses import FileResponse
 from collections import Counter
 from decimal import Decimal
 from sqlalchemy import func
 from typing import Optional
 
+from backend import database
+from backend.config import UPLOAD_DIR as _UPLOAD_DIR
+from backend.security import hacher_mot_de_passe, verifier_mot_de_passe
+
 # ==========================================
 # 1. INITIALISATION
 # ==========================================
-app = FastAPI(title="API Clinique", version="1.0")
+app = FastAPI(title="API Clinique", version="1.1")
 
-# Configuration du hachage
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Crée les tables manquantes au démarrage (ne supprime rien)
+database.Base.metadata.create_all(bind=database.engine)
 
-def hacher_mot_de_passe(mot_de_passe: str) -> str:
-    return pwd_context.hash(mot_de_passe)
 
-def verifier_mot_de_passe(mot_de_passe_clair: str, mot_de_passe_hache: str) -> bool:
-    return pwd_context.verify(mot_de_passe_clair, mot_de_passe_hache)
+def utilisateur_public(user):
+    """Représentation d'un utilisateur SANS le hachage du mot de passe."""
+    return {
+        "id": user.id,
+        "email": user.email,
+        "role": user.role,
+        "nom_complet": user.nom_complet,
+        "specialite": user.specialite,
+        "bureau": user.bureau,
+        "telephone": user.telephone,
+    }
 
 # Dépendance pour la session de base de données
 def get_db():
@@ -89,6 +97,7 @@ class NouveauPatientComplet(BaseModel):
     mot_de_passe: str
     date_naissance: str
     telephone: str
+    antecedents: Optional[str] = None
 
 class FactureCreate(BaseModel):
     id_rendez_vous: int
@@ -306,11 +315,12 @@ def lire_utilisateur_par_email(email: str, db: Session = Depends(get_db)):
     user = db.query(database.Utilisateur).filter(database.Utilisateur.email == email).first()
     if not user:
         raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
-    return user
+    return utilisateur_public(user)
 
 @app.get("/medecins/")
 def lire_medecins(db: Session = Depends(get_db)):
-    return db.query(database.Utilisateur).filter(database.Utilisateur.role == "medecin").all()
+    medecins = db.query(database.Utilisateur).filter(database.Utilisateur.role == "medecin").all()
+    return [utilisateur_public(m) for m in medecins]
 
 # ==========================================
 # 6. GESTION DES PATIENTS
@@ -519,26 +529,28 @@ def creer_patient_complet(data: NouveauPatientComplet, db: Session = Depends(get
 
     nouveau_dossier = database.Patient(
         id_utilisateur=nouvel_user.id, date_naissance=data.date_naissance,
-        telephone=data.telephone, antecedents="Aucun"
+        telephone=data.telephone,
+        antecedents=(data.antecedents or "").strip() or "Aucun"
     )
     db.add(nouveau_dossier)
     db.commit()
-    return {"message": "Patient et compte créés avec succès"}
+    db.refresh(nouveau_dossier)
+    return {"message": "Patient et compte créés avec succès", "id": nouveau_dossier.id}
 
 # ==========================================
 # 9. IA (DIAGNOSTIC MULTI-MALADIES)
 # ==========================================
 
-from datetime import datetime
-import json
-
 @app.post("/ia/predire")
 def lancer_prediction(data: DonneesMedicales, db: Session = Depends(get_db)):
     try:
-        from ia_service import predire_maladie
-
-        print("=== DONNÉES REÇUES ===")
-        print(data)
+        try:
+            from backend.ia_service import predire_maladie
+        except ImportError as e:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Module IA indisponible (PySpark/Java non installés ?) : {e}",
+            )
 
         resultat = predire_maladie(data.maladie, data.dict())
 
@@ -631,9 +643,8 @@ def lire_ordonnances_patient(patient_id: int, db: Session = Depends(get_db)):
 # ==========================================
 # 11. GESTION DES DOCUMENTS
 # ==========================================
-UPLOAD_DIR = "uploads"
-if not os.path.exists(UPLOAD_DIR):
-    os.makedirs(UPLOAD_DIR)
+UPLOAD_DIR = str(_UPLOAD_DIR)
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 @app.post("/patients/{patient_id}/documents")
 async def ajouter_document(

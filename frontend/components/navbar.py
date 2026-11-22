@@ -24,30 +24,35 @@ def afficher_navbar():
 """)
     
     with col2:
-        if st.button("🏠 Accueil", use_container_width=True):
+        if st.button("🏠 Accueil", width="stretch"):
             st.switch_page("app.py")
             
     with col3:
-        if st.button("🩺 Services", use_container_width=True):
+        if st.button("🩺 Services", width="stretch"):
             st.toast("Nos spécialités : Cardiologie, Diabétologie, Urgences, Laboratoire & Imagerie.")
             
     with col4:
-        if st.button("🧠 IA Clinique", use_container_width=True):
+        if st.button("🧠 IA Clinique", width="stretch"):
             st.toast("Modèles Spark MLlib prédictifs pour l'hypertension et le diabète connectés.")
             
     with col5:
-        if st.button("📞 Contact", use_container_width=True):
+        if st.button("📞 Contact", width="stretch"):
             st.toast("Clinique Santé+ • Mahdia, Tunisie • Urgences 24/7 : (+216) 73 000 000")
 
     with col6:
         if not st.session_state.get("logged_in"):
-            if st.button("🔐 Connexion", type="primary", use_container_width=True):
+            if st.button("🔐 Connexion", type="primary", width="stretch"):
                 st.session_state["show_login"] = True
                 st.rerun()
         else:
+            from auth import ROLE_PAGES
+
             role = st.session_state.get("role", "Espace")
-            if st.button(f"👤 {role.capitalize()}", type="primary", use_container_width=True):
-                st.toast(f"Connecté en tant que {st.session_state.get('name')}")
+            if st.button(f"👤 {role.capitalize()}", type="primary", width="stretch",
+                         help=f"Connecté en tant que {st.session_state.get('name')}"):
+                page = ROLE_PAGES.get(role)
+                if page:
+                    st.switch_page(page)
             
     render_clean_html("""
 <div style="height:1px;background:linear-gradient(90deg,transparent 0%,rgba(0,242,254,0.3) 50%,transparent 100%);margin-top:10px;margin-bottom:25px;"></div>

@@ -1,11 +1,12 @@
 from pyspark.sql import SparkSession
 import os
+ML_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # dossier ml/
 
 # Initialisation de Spark
 spark = SparkSession.builder.appName("HealthDataAnalysis").getOrCreate()
 
 # Lecture des données
-file_path = os.path.join("data", "raw", "health_data_1000.csv")
+file_path = os.path.join(ML_DIR, "data", "raw", "health_data_1000.csv")
 df = spark.read.csv(file_path, header=True, inferSchema=True)
 
 print("\n--- 1. Aperçu des données ---")

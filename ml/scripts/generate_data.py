@@ -1,9 +1,10 @@
 import csv
 import random
 import os
+ML_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # dossier ml/
 
 # Chemin de sauvegarde
-output_path = os.path.join("data", "raw", "health_data_1000.csv")
+output_path = os.path.join(ML_DIR, "data", "raw", "health_data_1000.csv")
 
 # Créer le dossier s'il n'existe pas
 os.makedirs(os.path.dirname(output_path), exist_ok=True)

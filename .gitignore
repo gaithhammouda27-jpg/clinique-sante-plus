@@ -45,3 +45,15 @@ train_log.txt
 
 # Fichiers uploadés localement
 uploads/
+
+# Base SQLite locale et fichiers uploadés (chemins depuis la réorganisation)
+clinique.db
+uploads/
+
+# Fichiers de sauvegarde manuels : utiliser git plutôt que des copies *_backup.py
+*_backup*.py
+
+# Spark
+spark-warehouse/
+metastore_db/
+derby.log

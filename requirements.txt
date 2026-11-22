@@ -1,9 +1,16 @@
-fastapi
-uvicorn
-sqlalchemy
-pydantic
-streamlit
-plotly
-pandas
-requests
-pyspark
+# --- Backend (API) ---
+fastapi>=0.110
+uvicorn[standard]>=0.29
+sqlalchemy>=2.0
+pydantic>=2.5
+python-multipart>=0.0.9   # requis par FastAPI pour l'upload de documents (UploadFile)
+bcrypt>=4.1               # remplace passlib (incompatible avec bcrypt >= 4.1)
+
+# --- Frontend (Streamlit) ---
+streamlit>=1.50           # paramètre width="stretch"
+plotly>=5.20
+pandas>=2.1
+requests>=2.31
+
+# --- IA (optionnel : nécessite Java 17) ---
+pyspark>=3.5

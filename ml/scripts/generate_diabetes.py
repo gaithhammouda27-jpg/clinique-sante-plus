@@ -1,8 +1,9 @@
 import csv
 import random
 import os
+ML_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # dossier ml/
 
-output_path = os.path.join("data", "raw", "diabetes_data_1000.csv")
+output_path = os.path.join(ML_DIR, "data", "raw", "diabetes_data_1000.csv")
 os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
 with open(output_path, mode="w", newline="", encoding="utf-8") as file:
