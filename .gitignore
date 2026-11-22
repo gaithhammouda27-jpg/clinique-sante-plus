@@ -33,3 +33,15 @@ Thumbs.db
 # Cache
 .pytest_cache/
 .mypy_cache/
+
+# Fichiers temporaires Spark
+*.crc
+_SUCCESS
+._SUCCESS.crc
+.part-*
+
+# Logs d'entraînement
+train_log.txt
+
+# Fichiers uploadés localement
+uploads/
