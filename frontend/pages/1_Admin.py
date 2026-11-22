@@ -1,6 +1,6 @@
 
 import streamlit as st
-import requests
+import api_client as api
 import pandas as pd
 import plotly.express as px
 import sys
@@ -19,8 +19,9 @@ from components.sidebar import render_sidebar
 from components.header import render_header
 from components.cards import render_metric_card
 from components.charts import apply_cinematic_theme
+from auth import require_role
 
-API_URL = "http://127.0.0.1:8000"
+API_URL = api.API_URL
 
 st.set_page_config(
     page_title="Administration | Clinique Santé+",
@@ -29,27 +30,15 @@ st.set_page_config(
 )
 
 # ============================================================
-# 2. SECURITE
+# 2. SÉCURITÉ
 # ============================================================
-
-# ============================================================
-# 2. SÉCURITÉ (REDIRECTION AUTOMATIQUE)
-# ============================================================
-if not st.session_state.get("logged_in") or st.session_state.get("role") != "admin":
-    # On affiche un petit message de chargement au lieu d'une erreur
-    st.info("Redirection vers la page de connexion...")
-    # On redirige vers l'accueil
-    st.switch_page("app.py")
-    st.stop() # On arrête l'exécution de la page Admin
+require_role("admin")
 apply_custom_style()
 col_retour, col_vide = st.columns([1, 5])
 
 with col_retour:
-    if st.button("← Retour à l'accueil", use_container_width=True):
-        # On nettoie la session pour être sûr de ne pas rester connecté
-        for key in list(st.session_state.keys()):
-            del st.session_state[key]
-        # On redirige vers app.py (qui est à la racine)
+    # Avant : ce bouton « Retour » déconnectait l'utilisateur sans prévenir.
+    if st.button("← Retour à l'accueil", width="stretch"):
         st.switch_page("app.py")
 
 
@@ -64,7 +53,7 @@ with col_retour:
 
 def get_api_data(endpoint):
     try:
-        response = requests.get(
+        response = api.get(
             f"{API_URL}{endpoint}",
             timeout=15
         )
@@ -77,7 +66,7 @@ def get_api_data(endpoint):
             f"(HTTP {response.status_code})."
         )
 
-    except requests.RequestException as e:
+    except api.RequestException as e:
         st.warning(f"Erreur de connexion à {endpoint} : {e}")
 
     return None
@@ -211,7 +200,7 @@ with col_head:
 
 with col_refresh:
     st.write("")
-    if st.button("🔄 Actualiser", use_container_width=True):
+    if st.button("🔄 Actualiser", width="stretch"):
         st.rerun()
 
 st.divider()
@@ -363,7 +352,7 @@ def afficher_graphique(fig, hauteur=380):
 
     st.plotly_chart(
         fig,
-        use_container_width=True
+        width="stretch"
     )
 
 
@@ -1047,7 +1036,7 @@ with tab_finance:
 
         st.dataframe(
             categories_df,
-            use_container_width=True,
+            width="stretch",
             hide_index=True
         )
 
@@ -1097,7 +1086,7 @@ with tab_pharma:
 
         st.dataframe(
             alertes_df,
-            use_container_width=True,
+            width="stretch",
             hide_index=True
         )
 
@@ -1693,7 +1682,7 @@ with tab_hospital:
 
             st.dataframe(
                 services_stats,
-                use_container_width=True,
+                width="stretch",
                 hide_index=True
             )
 
@@ -1711,7 +1700,7 @@ with tab_hospital:
 
         st.dataframe(
             df_services[colonnes],
-            use_container_width=True,
+            width="stretch",
             hide_index=True
         )
 
@@ -1952,7 +1941,7 @@ with tab_hospital:
 
         st.dataframe(
             resume,
-            use_container_width=True,
+            width="stretch",
             hide_index=True
         )
 
@@ -2162,7 +2151,7 @@ def charger_consultations_api():
     consultations = []
 
     try:
-        response = requests.get(
+        response = api.get(
             f"{API_URL}/patients/",
             timeout=20
         )
@@ -2181,7 +2170,7 @@ def charger_consultations_api():
                 continue
 
             try:
-                rep = requests.get(
+                rep = api.get(
                     f"{API_URL}/patients/{patient_id}/consultations",
                     timeout=10
                 )
@@ -2208,10 +2197,10 @@ def charger_consultations_api():
                         "diagnostic": c.get("diagnostic")
                     })
 
-            except requests.RequestException:
+            except api.RequestException:
                 continue
 
-    except (requests.RequestException, ValueError):
+    except (api.RequestException, ValueError):
         return []
 
     return consultations
@@ -2221,7 +2210,7 @@ def charger_consultations_api():
 def charger_journal_api():
 
     try:
-        response = requests.get(
+        response = api.get(
             f"{API_URL}/journal-activite/",
             timeout=15
         )
@@ -2232,7 +2221,7 @@ def charger_journal_api():
 
         return resultat if isinstance(resultat, list) else []
 
-    except (requests.RequestException, ValueError):
+    except (api.RequestException, ValueError):
         return []
 
 
@@ -2276,7 +2265,7 @@ def afficher_graphique_users(fig, hauteur=380):
 
     st.plotly_chart(
         fig,
-        use_container_width=True
+        width="stretch"
     )
 
 
@@ -2598,7 +2587,7 @@ with tab_users:
 
         st.dataframe(
             df_filtre,
-            use_container_width=True,
+            width="stretch",
             hide_index=True
         )
 
@@ -2806,7 +2795,7 @@ with tab_users:
 
                     st.dataframe(
                         df_consult[colonnes],
-                        use_container_width=True,
+                        width="stretch",
                         hide_index=True
                     )
 
@@ -2897,7 +2886,7 @@ with tab_users:
 
                     st.dataframe(
                         df_sec[colonnes],
-                        use_container_width=True,
+                        width="stretch",
                         hide_index=True
                     )
 
@@ -2984,7 +2973,7 @@ with tab_users:
 
                     st.dataframe(
                         df_admin[colonnes],
-                        use_container_width=True,
+                        width="stretch",
                         hide_index=True
                     )
 
@@ -3056,7 +3045,7 @@ with tab_users:
 
             submit = st.form_submit_button(
                 "➕ Créer l'utilisateur",
-                use_container_width=True
+                width="stretch"
             )
 
             if submit:
@@ -3087,7 +3076,7 @@ with tab_users:
 
                     try:
 
-                        response = requests.post(
+                        response = api.post(
                             f"{API_URL}/utilisateurs/",
                             json=payload,
                             timeout=15
@@ -3110,7 +3099,7 @@ with tab_users:
                                 f"Erreur de création : {response.text}"
                             )
 
-                    except requests.RequestException as e:
+                    except api.RequestException as e:
 
                         st.error(
                             f"Impossible de contacter l'API : {e}"

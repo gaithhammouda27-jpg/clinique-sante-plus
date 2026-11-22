@@ -1,0 +1,19 @@
+# Thème Streamlit aligné sur le design sombre de frontend/style.py.
+# Sans ce fichier, Streamlit utilisait son thème CLAIR par défaut sous le CSS
+# sombre : en-tête blanc, alertes st.info illisibles (texte blanc sur fond clair),
+# tableaux et champs de saisie clairs.
+# NB : Streamlit lit ce fichier depuis le dossier où on lance la commande
+# (lancer depuis la racine du projet, cf. run_frontend.ps1).
+
+[theme]
+base = "dark"
+primaryColor = "#00F2FE"
+backgroundColor = "#070B14"
+secondaryBackgroundColor = "#0F172A"
+textColor = "#F8FAFC"
+
+[client]
+toolbarMode = "minimal"
+
+[server]
+runOnSave = true

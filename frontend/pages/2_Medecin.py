@@ -1,5 +1,5 @@
 import streamlit as st
-import requests
+import api_client as api
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -13,27 +13,26 @@ from components.sidebar import render_sidebar
 from components.header import render_header
 from components.charts import create_ai_risk_gauge, create_biometric_radar, apply_cinematic_theme
 from components.cards import render_metric_card
+from auth import require_role
 
-if not st.session_state.get("logged_in") or st.session_state.get("role") != "medecin":
-    st.error("⛔ Accès refusé.")
-    st.stop()
-
+require_role("medecin")
 apply_custom_style()
 
 nom_medecin = st.session_state.get("name", "Médecin")
 render_sidebar(nom_medecin, "medecin")
 render_header(
-    f"Cabinet Médical — Dr. {nom_medecin}",
+    # Les noms en base commencent déjà par « Dr. » : évite « Dr. Dr. Martin »
+    f"Cabinet Médical — {nom_medecin if nom_medecin.lower().startswith('dr') else 'Dr. ' + nom_medecin}",
     "Planning des consultations, dossier patient informatisé & assistance diagnostique IA",
     badge="ESPACE MÉDECIN CLINICIEN"
 )
 
-API_URL = "http://127.0.0.1:8000"
+API_URL = api.API_URL
 ID_MEDECIN_CONNECTE = st.session_state.get("user_id")
 
 # --- SÉLECTION DU PATIENT ---
 try:
-    res_patients = requests.get(f"{API_URL}/patients/")
+    res_patients = api.get(f"{API_URL}/patients/")
     liste_patients = res_patients.json() if res_patients.status_code == 200 else []
 except:
     liste_patients = []
@@ -79,7 +78,7 @@ with tab1:
     )
 
     try:
-        res_rdvs = requests.get(
+        res_rdvs = api.get(
             f"{API_URL}/medecins/{ID_MEDECIN_CONNECTE}/rendezvous"
         )
 
@@ -115,45 +114,67 @@ with tab1:
 
             if rdvs:
                 df_rdvs = pd.DataFrame(rdvs)
+                df_rdvs["date_heure"] = pd.to_datetime(df_rdvs["date_heure"], errors="coerce")
 
                 st.dataframe(
-                    df_rdvs,
-                    use_container_width=True,
-                    hide_index=True
+                    df_rdvs.sort_values("date_heure", ascending=False)[
+                        ["id", "date_heure", "patient_nom", "motif", "salle", "statut"]
+                    ].rename(columns={
+                        "id": "N°", "date_heure": "Date & heure", "patient_nom": "Patient",
+                        "motif": "Motif", "salle": "Salle", "statut": "Statut",
+                    }),
+                    width="stretch",
+                    hide_index=True,
+                    column_config={"Date & heure": st.column_config.DatetimeColumn(format="DD/MM/YYYY HH:mm")},
                 )
 
                 st.divider()
 
-                # Clôturer un rendez-vous
+                # Mettre à jour un rendez-vous.
+                # Avant : un champ numérique libre permettait de « terminer »
+                # n'importe quel RDV (même celui d'un autre médecin), sans
+                # aucun retour en cas d'erreur.
                 st.markdown("#### ✅ Gestion des rendez-vous")
 
-                st.caption(
-                    "Saisissez l'identifiant du rendez-vous à marquer "
-                    "comme terminé."
-                )
+                if "_flash_medecin" in st.session_state:
+                    st.success(st.session_state.pop("_flash_medecin"))
 
-                col_action, col_button = st.columns([2, 1])
+                ouverts = [r for r in rdvs if r.get("statut") not in ("terminé", "annulé")]
 
-                with col_action:
-                    rdv_id = st.number_input(
-                        "ID du rendez-vous",
-                        min_value=1,
-                        step=1
-                    )
+                if not ouverts:
+                    st.info("Tous vos rendez-vous sont clôturés.")
+                else:
+                    options_rdv = {
+                        r["id"]: f"RDV n°{r['id']} — {r.get('patient_nom')} — {r.get('date_heure')} ({r.get('statut')})"
+                        for r in sorted(ouverts, key=lambda r: r.get("date_heure") or "")
+                    }
+                    col_action, col_statut, col_button = st.columns([3, 1.3, 1.2])
 
-                with col_button:
-                    st.write("")
-                    st.write("")
-
-                    if st.button(
-                        "✅ Marquer comme terminé",
-                        use_container_width=True
-                    ):
-                        requests.put(
-                            f"{API_URL}/rendezvous/{rdv_id}/statut",
-                            json={"statut": "terminé"}
+                    with col_action:
+                        rdv_id = st.selectbox(
+                            "Rendez-vous",
+                            options=list(options_rdv),
+                            format_func=options_rdv.get,
                         )
-                        st.rerun()
+                    with col_statut:
+                        nouveau_statut = st.selectbox("Nouveau statut", ["terminé", "confirmé", "annulé"])
+
+                    with col_button:
+                        st.write("")
+                        st.write("")
+                        if st.button("💾 Appliquer", width="stretch", type="primary"):
+                            try:
+                                res_statut = api.put(
+                                    f"{API_URL}/rendezvous/{rdv_id}/statut",
+                                    json={"statut": nouveau_statut}
+                                )
+                                if res_statut.status_code == 200:
+                                    st.session_state["_flash_medecin"] = f"RDV n°{rdv_id} → {nouveau_statut}"
+                                    st.rerun()
+                                else:
+                                    st.error(f"Erreur : {api.error_detail(res_statut)}")
+                            except api.RequestException as e:
+                                st.error(f"Erreur de connexion : {e}")
 
             else:
                 st.info(
@@ -279,7 +300,7 @@ with tab2:
 
         submit = st.form_submit_button(
             "🧠 Lancer l'analyse IA",
-            use_container_width=True
+            width="stretch"
         )
 
     # Traitement du résultat
@@ -310,7 +331,7 @@ with tab2:
         with st.spinner("🧠 Analyse en cours..."):
 
             try:
-                res = requests.post(
+                res = api.post(
                     f"{API_URL}/ia/predire",
                     json=payload,
                     timeout=60
@@ -335,7 +356,7 @@ with tab2:
                                 title=f"Risque Prédit : {maladie_choisie}",
                                 disease=maladie_choisie
                             ),
-                            use_container_width=True
+                            width="stretch"
                         )
 
                     with col_radar:
@@ -363,7 +384,7 @@ with tab2:
                                 radar_data,
                                 title=f"Profil Biométrique Comparatif ({maladie_choisie})"
                             ),
-                            use_container_width=True
+                            width="stretch"
                         )
 
                     # Diagnostic interprété
@@ -392,14 +413,14 @@ with tab2:
                         f"Erreur API ({res.status_code}) : {res.text}"
                     )
 
-            except requests.exceptions.RequestException as e:
+            except api.RequestException as e:
                 st.error(f"Erreur de connexion à l'API : {e}")
 
 with tab3:
     st.subheader(f"📁 Dossier Médical de {patient_options[patient_selectionne_id]}")
     
     try:
-        res_dossier = requests.get(f"{API_URL}/patients/{patient_selectionne_id}/dossier-complet")
+        res_dossier = api.get(f"{API_URL}/patients/{patient_selectionne_id}/dossier-complet")
         if res_dossier.status_code == 200:
             dossier = res_dossier.json()
             patient_info = dossier["patient"]
@@ -435,7 +456,7 @@ with tab3:
                                 st.warning("Veuillez sélectionner un fichier.")
                             else:
                                 try:
-                                    res = requests.post(
+                                    res = api.post(
                                         f"{API_URL}/patients/{patient_selectionne_id}/documents",
                                         params={
                                             "id_medecin": ID_MEDECIN_CONNECTE,
@@ -457,7 +478,7 @@ with tab3:
                                     else:
                                         st.error(f"Erreur : {res.text}")
 
-                                except requests.exceptions.RequestException as e:
+                                except api.RequestException as e:
                                     st.error(f"Erreur de connexion : {e}")
 
                 st.divider()
@@ -484,7 +505,7 @@ with tab3:
 
                                 if modifier:
                                     try:
-                                        res = requests.put(
+                                        res = api.put(
                                             f"{API_URL}/documents/{doc['id']}",
                                             params={"description": nouvelle_description},
                                             timeout=30
@@ -496,28 +517,34 @@ with tab3:
                                         else:
                                             st.error(res.text)
 
-                                    except requests.exceptions.RequestException as e:
+                                    except api.RequestException as e:
                                         st.error(f"Erreur : {e}")
 
-                            # Télécharger le document
-                            try:
-                                res_download = requests.get(
-                                    f"{API_URL}/documents/{doc['id']}/telecharger",
-                                    timeout=30
+                            # Télécharger le document — à la demande.
+                            # Avant : CHAQUE document était re-téléchargé à
+                            # chaque interaction sur la page (très lent).
+                            cle_dl = f"doc_bytes_{doc['id']}"
+                            if cle_dl not in st.session_state:
+                                if st.button("📥 Préparer le téléchargement", key=f"prep_{doc['id']}"):
+                                    try:
+                                        res_download = api.get(
+                                            f"{API_URL}/documents/{doc['id']}/telecharger",
+                                            timeout=30
+                                        )
+                                        if res_download.status_code == 200:
+                                            st.session_state[cle_dl] = res_download.content
+                                            st.rerun()
+                                        else:
+                                            st.warning("Téléchargement indisponible.")
+                                    except api.RequestException:
+                                        st.warning("Impossible de contacter le serveur.")
+                            else:
+                                st.download_button(
+                                    "⬇️ Télécharger",
+                                    data=st.session_state[cle_dl],
+                                    file_name=doc["nom_fichier"],
+                                    key=f"download_{doc['id']}"
                                 )
-
-                                if res_download.status_code == 200:
-                                    st.download_button(
-                                        "⬇️ Télécharger",
-                                        data=res_download.content,
-                                        file_name=doc["nom_fichier"],
-                                        key=f"download_{doc['id']}"
-                                    )
-                                else:
-                                    st.warning("Téléchargement indisponible.")
-
-                            except requests.exceptions.RequestException:
-                                st.warning("Impossible de contacter le serveur.")
 
                             # Supprimer le document
                             if st.button(
@@ -533,7 +560,7 @@ with tab3:
 
                                 with col_a:
                                     if st.button("Oui, supprimer", key=f"oui_doc_{doc['id']}"):
-                                        res = requests.delete(
+                                        res = api.delete(
                                             f"{API_URL}/documents/{doc['id']}",
                                             timeout=30
                                         )
@@ -598,7 +625,7 @@ with tab3:
                                 }
 
                                 try:
-                                    res = requests.post(
+                                    res = api.post(
                                         f"{API_URL}/ordonnances/",
                                         json=payload_ordonnance,
                                         timeout=30
@@ -612,7 +639,7 @@ with tab3:
                                             f"Erreur création ({res.status_code}) : {res.text}"
                                         )
 
-                                except requests.exceptions.RequestException as e:
+                                except api.RequestException as e:
                                     st.error(f"Erreur API : {e}")
 
                 st.divider()
@@ -627,7 +654,7 @@ with tab3:
                     for o in ordonnances:
 
                         with st.expander(
-                            f"💊 Ordonnance du {o['date']} — Dr. {o['medecin']}"
+                            f"💊 Ordonnance du {o['date']} — {o['medecin']}"
                         ):
 
                             st.markdown("**Médicaments :**")
@@ -677,7 +704,7 @@ with tab3:
 
                                     else:
                                         try:
-                                            res = requests.put(
+                                            res = api.put(
                                                 f"{API_URL}/ordonnances/{o['id']}",
                                                 params={
                                                     "medicaments": nouveaux_medicaments.strip(),
@@ -695,7 +722,7 @@ with tab3:
                                                     f"Erreur modification ({res.status_code}) : {res.text}"
                                                 )
 
-                                        except requests.exceptions.RequestException as e:
+                                        except api.RequestException as e:
                                             st.error(f"Erreur API : {e}")
 
                             st.divider()
@@ -728,7 +755,7 @@ with tab3:
                                         key=f"oui_ord_{o['id']}"
                                     ):
                                         try:
-                                            res = requests.delete(
+                                            res = api.delete(
                                                 f"{API_URL}/ordonnances/{o['id']}",
                                                 timeout=30
                                             )
@@ -742,7 +769,7 @@ with tab3:
                                                     f"Erreur suppression ({res.status_code}) : {res.text}"
                                                 )
 
-                                        except requests.exceptions.RequestException as e:
+                                        except api.RequestException as e:
                                             st.error(f"Erreur API : {e}")
 
                                 with col_b:
@@ -786,7 +813,7 @@ with tab3:
                                 }
 
                                 try:
-                                    res = requests.post(
+                                    res = api.post(
                                         f"{API_URL}/consultations/",
                                         json=payload_consultation,
                                         timeout=30
@@ -798,7 +825,7 @@ with tab3:
                                     else:
                                         st.error(res.text)
 
-                                except requests.exceptions.RequestException as e:
+                                except api.RequestException as e:
                                     st.error(f"Erreur API : {e}")
 
                 st.divider()
@@ -808,7 +835,7 @@ with tab3:
                 if consultations:
                     for c in consultations:
                         with st.expander(
-                            f"📋 Consultation du {c['date']} — Dr. {c['medecin']}"
+                            f"📋 Consultation du {c['date']} — {c['medecin']}"
                         ):
                             st.write("**Diagnostic :**", c["diagnostic"])
                             st.write("**Traitement :**", c.get("traitement") or "Aucun")
@@ -832,7 +859,7 @@ with tab3:
 
                                 if modifier:
                                     try:
-                                        res = requests.put(
+                                        res = api.put(
                                             f"{API_URL}/consultations/{c['id']}",
                                             params={
                                                 "diagnostic": nouveau_diagnostic,
@@ -847,7 +874,7 @@ with tab3:
                                         else:
                                             st.error(res.text)
 
-                                    except requests.exceptions.RequestException as e:
+                                    except api.RequestException as e:
                                         st.error(f"Erreur : {e}")
 
                             # Suppression
@@ -864,7 +891,7 @@ with tab3:
 
                                 with col_a:
                                     if st.button("Oui, supprimer", key=f"oui_cons_{c['id']}"):
-                                        res = requests.delete(
+                                        res = api.delete(
                                             f"{API_URL}/consultations/{c['id']}",
                                             timeout=30
                                         )
@@ -991,8 +1018,6 @@ with tab3:
                         # -----------------------------
                         st.markdown("### 📈 Évolution des probabilités")
 
-                        import plotly.express as px
-
                         fig = px.line(
                             df_filtre,
                             x="date",
@@ -1034,7 +1059,7 @@ with tab3:
 
                         st.plotly_chart(
                             fig,
-                            use_container_width=True
+                            width="stretch"
                         )
 
                         st.divider()
@@ -1044,9 +1069,11 @@ with tab3:
                         # -----------------------------
                         st.markdown("### 📋 Historique des analyses")
 
+                        # Tri AVANT formatage : trier la chaîne « jj/mm/aaaa »
+                        # donnait un ordre faux (par jour, pas par date).
                         historique = df_filtre[
                             ["id", "maladie", "date", "probabilite_pct"]
-                        ].copy()
+                        ].sort_values("date", ascending=False).copy()
 
                         historique["date"] = historique["date"].dt.strftime(
                             "%d/%m/%Y %H:%M"
@@ -1064,11 +1091,8 @@ with tab3:
                         ].round(2)
 
                         st.dataframe(
-                            historique.sort_values(
-                                "Date",
-                                ascending=False
-                            ),
-                            use_container_width=True,
+                            historique,
+                            width="stretch",
                             hide_index=True
                         )
 

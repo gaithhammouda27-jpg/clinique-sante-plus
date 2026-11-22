@@ -75,13 +75,13 @@ def render_sidebar(name, role):
         st.page_link(
             "app.py",
             label="🏠 Portail d'Accueil",
-            use_container_width=True
+            width="stretch"
         )
 
         st.page_link(
             config["page"],
             label=f"{config['icon']} Mon Espace ({config['label']})",
-            use_container_width=True
+            width="stretch"
         )
 
         render_clean_html("""
@@ -90,10 +90,12 @@ def render_sidebar(name, role):
 """)
 
         # Déconnexion
-        if st.button("🚪 Déconnexion Sécurisée", key="sidebar_logout_btn", use_container_width=True):
-            for key in list(st.session_state.keys()):
-                del st.session_state[key]
-            st.rerun()
+        if st.button("🚪 Déconnexion Sécurisée", key="sidebar_logout_btn", width="stretch"):
+            from auth import logout
+
+            logout()
+            # Avant : st.rerun() laissait l'utilisateur sur une page « Accès refusé »
+            st.switch_page("app.py")
 
         render_clean_html("""
 <div style="text-align:center;color:#64748B !important;font-size:0.72rem;margin-top:35px;padding-top:15px;border-top:1px solid rgba(255,255,255,0.05);">

@@ -3,14 +3,13 @@ import random
 from datetime import datetime, timedelta
 from decimal import Decimal
 
-import database
-from passlib.context import CryptContext
+from backend import database
+from backend.config import DEMO_PASSWORD
+from backend.security import hacher_mot_de_passe
 
 # =====================================================
 # CONFIGURATION
 # =====================================================
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 random.seed(2026)
 
@@ -65,9 +64,53 @@ def ajouter_si_absent(db, modele, filtre, objet):
 # 1. UTILISATEURS ET PATIENTS DE DEMONSTRATION
 # =====================================================
 
+# Comptes affichés dans l'onglet « Accès Rapide Démo » de frontend/app.py.
+# Ils doivent exister en base : l'accès démo passe par la vraie route /login.
+COMPTES_DEMO = [
+    {"email": "admin@clinique.com", "role": "admin", "nom_complet": "Administrateur Central"},
+    {"email": "dr.martin@clinique.com", "role": "medecin", "nom_complet": "Dr. Martin",
+     "specialite": "Cardiologue", "bureau": "Bureau 101", "telephone": "73680101"},
+    {"email": "secretaire@clinique.com", "role": "secretaire", "nom_complet": "Sophie Secrétaire"},
+    {"email": "jean.dupont@email.com", "role": "patient", "nom_complet": "Jean Dupont",
+     "telephone": "22123456"},
+]
+
+
+def creer_comptes_demo(db):
+    """Crée les comptes de démonstration (mot de passe : CLINIQUE_DEMO_PASSWORD)."""
+    medecin_demo, patient_demo = None, None
+
+    for compte in COMPTES_DEMO:
+        user = db.query(database.Utilisateur).filter_by(email=compte["email"]).first()
+        if not user:
+            user = database.Utilisateur(
+                mot_de_passe=hacher_mot_de_passe(DEMO_PASSWORD), **compte
+            )
+            db.add(user)
+            db.flush()
+
+        if user.role == "medecin":
+            medecin_demo = user
+        elif user.role == "patient":
+            patient = db.query(database.Patient).filter_by(id_utilisateur=user.id).first()
+            if not patient:
+                patient = database.Patient(
+                    id_utilisateur=user.id,
+                    date_naissance="1972-04-15",
+                    telephone=user.telephone or "20000000",
+                    antecedents=f"{MARQUEUR} Hypertension familiale",
+                )
+                db.add(patient)
+                db.flush()
+            patient_demo = patient
+
+    return medecin_demo, patient_demo
+
+
 def creer_utilisateurs_patients(db):
-    medecins = []
-    patients = []
+    medecin_demo, patient_demo = creer_comptes_demo(db)
+    medecins = [medecin_demo]
+    patients = [patient_demo]
 
     # Deux médecins fictifs avec des noms tunisiens
     for i in range(1, 3):
@@ -80,7 +123,7 @@ def creer_utilisateurs_patients(db):
         if not user:
             user = database.Utilisateur(
                 email=email,
-                mot_de_passe=pwd_context.hash("TestClinique2026!"),
+                mot_de_passe=hacher_mot_de_passe("TestClinique2026!"),
                 role="medecin",
                 nom_complet="Dr. " + nom_arabe(),
                 specialite=random.choice(SPECIALITES),
@@ -103,7 +146,7 @@ def creer_utilisateurs_patients(db):
         if not user:
             user = database.Utilisateur(
                 email=email,
-                mot_de_passe=pwd_context.hash("TestClinique2026!"),
+                mot_de_passe=hacher_mot_de_passe("TestClinique2026!"),
                 role="patient",
                 nom_complet=nom_arabe(),
                 telephone=f"21{random.randint(100000, 999999)}"
@@ -184,6 +227,42 @@ def creer_rendez_vous(db, medecins, patients):
     return db.query(database.RendezVous).filter(
         database.RendezVous.motif.like(f"%{MARQUEUR}%")
     ).all()
+
+
+# =====================================================
+# 2b. HISTORIQUE DE PREDICTIONS IA (DEMO)
+# =====================================================
+
+def creer_predictions(db, medecins, patients):
+    """Historique fictif pour alimenter les tableaux de bord sans Spark."""
+    import json
+
+    deja = db.query(database.Prediction).filter(
+        database.Prediction.constantes.like('%"demo": true%')
+    ).first()
+    if deja:
+        return
+
+    for patient in patients[:3]:
+        for k in range(5):
+            date = datetime.now() - timedelta(days=30 * (5 - k))
+            systolic = random.randint(118, 165)
+            glucose = round(random.uniform(4.8, 8.5), 1)
+            constantes = {
+                "maladie": "hypertension", "age": 54, "gender": "M",
+                "systolic_bp": systolic, "glucose": glucose,
+                "heart_rate": random.randint(62, 95), "demo": True,
+            }
+            proba = min(0.95, max(0.05, (systolic - 110) / 70))
+            db.add(database.Prediction(
+                id_patient=patient.id,
+                id_medecin=medecins[0].id,
+                maladie="hypertension",
+                probabilite=round(proba, 3),
+                date_prediction=date_texte(date),
+                constantes=json.dumps(constantes),
+            ))
+    db.flush()
 
 
 # =====================================================
@@ -618,6 +697,8 @@ def generer_donnees():
             db, medecins, patients
         )
 
+        creer_predictions(db, medecins, patients)
+
         creer_consultations_mesures(
             db, medecins, patients
         )
@@ -661,6 +742,9 @@ def generer_donnees():
         print("Journal d'activité : OK")
         print("--------------------------------------")
         print("Les données fictives portent le marqueur [TEST].")
+        print("Comptes démo (mot de passe :", DEMO_PASSWORD + ") :")
+        for compte in COMPTES_DEMO:
+            print(f"  - {compte['role']:<10} {compte['email']}")
         print("Aucune donnée existante n'a été supprimée.")
 
     except Exception as erreur:

@@ -1,8 +1,7 @@
+import os
+
 import streamlit as st
-import requests
-import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
+import api_client as api
 
 from style import apply_custom_style, render_clean_html
 from components.navbar import afficher_navbar
@@ -12,6 +11,7 @@ from components.charts import (
     create_patient_flow_sankey
 )
 from components.cards import render_metric_card
+from auth import ROLE_PAGES, login_user, logout
 
 # ============================================================
 # 1. CONFIGURATION DE LA PAGE
@@ -27,26 +27,41 @@ st.set_page_config(
 apply_custom_style()
 afficher_navbar()
 
-API_URL = "http://127.0.0.1:8000"
-
-# Pages accessibles selon le rôle
-ROLE_PAGES = {
-    "admin": "pages/1_Admin.py",
-    "administrateur": "pages/1_Admin.py",
-    "medecin": "pages/2_Medecin.py",
-    "médecin": "pages/2_Medecin.py",
-    "secretaire": "pages/3_Secretaire.py",
-    "secrétaire": "pages/3_Secretaire.py",
-    "patient": "pages/4_Patient.py"
-}
-
-# Comptes de démonstration préconfigurés pour accès rapide
+# Comptes de démonstration (créés par `python -m backend.seed_data`).
+# L'accès rapide passe par la vraie route /login : avant, il ouvrait une
+# session avec des ID codés en dur qui ne correspondaient à aucune ligne en base.
+DEMO_PASSWORD = os.getenv("CLINIQUE_DEMO_PASSWORD", "Demo2026!")
 DEMO_ACCOUNTS = {
-    "Administrateur": {"email": "admin@clinique.com", "role": "admin", "name": "Administrateur Central", "id": 64},
-    "Dr. Martin (Médecin)": {"email": "dr.martin@clinique.com", "role": "medecin", "name": "Dr. Martin", "id": 1},
-    "Sophie (Secrétariat)": {"email": "secretaire@clinique.com", "role": "secretaire", "name": "Sophie Secrétaire", "id": 12},
-    "Jean Dupont (Patient)": {"email": "jean.dupont@email.com", "role": "patient", "name": "Jean Dupont", "id": 13}
+    "Administrateur": "admin@clinique.com",
+    "Dr. Martin (Médecin)": "dr.martin@clinique.com",
+    "Sophie (Secrétariat)": "secretaire@clinique.com",
+    "Jean Dupont (Patient)": "jean.dupont@email.com",
 }
+
+
+def tenter_connexion(email: str, password: str) -> None:
+    """Appelle /login, ouvre la session et redirige vers l'espace du rôle."""
+    try:
+        response = api.post(
+            "/login",
+            json={"email": email.strip(), "mot_de_passe": password},
+            timeout=8,
+        )
+    except api.RequestException:
+        st.error("Impossible de contacter l'API. Assurez-vous qu'elle est démarrée (voir README).")
+        return
+
+    if response.status_code == 200:
+        destination = login_user(response.json())
+        if destination:
+            st.session_state["show_login"] = False
+            st.switch_page(destination)
+        else:
+            st.error("Rôle utilisateur non reconnu.")
+    elif response.status_code == 401:
+        st.error("Identifiants invalides.")
+    else:
+        st.error(f"Erreur serveur : {api.error_detail(response)}")
 
 CLINIQUE = {
     "nom": "Clinique Santé+",
@@ -61,12 +76,9 @@ CLINIQUE = {
     ]
 }
 
-# Redirection automatique si déjà connecté
-if st.session_state.get("logged_in"):
-    role = str(st.session_state.get("role", "")).strip().lower()
-    destination = ROLE_PAGES.get(role)
-    if destination:
-        st.switch_page(destination)
+# Plus de redirection automatique quand on est connecté : elle rendait le
+# lien « Portail d'Accueil » de la sidebar inutilisable (retour immédiat).
+MY_PAGE = ROLE_PAGES.get(st.session_state.get("role", "")) if st.session_state.get("logged_in") else None
 
 if "show_login" not in st.session_state:
     st.session_state["show_login"] = False
@@ -98,58 +110,28 @@ if st.session_state["show_login"]:
                 email = st.text_input("Adresse e-mail professionnelle ou patient", placeholder="ex: dr.martin@clinique.com")
                 password = st.text_input("Mot de passe", type="password", placeholder="••••••••••••")
                 
-                submit = st.form_submit_button("Se connecter au SIH", use_container_width=True, type="primary")
+                submit = st.form_submit_button("Se connecter au SIH", width="stretch", type="primary")
 
                 if submit:
                     if not email.strip() or not password:
                         st.warning("Veuillez remplir tous les champs.")
                     else:
                         with st.spinner("Vérification auprès du serveur d'authentification..."):
-                            try:
-                                response = requests.post(
-                                    f"{API_URL}/login",
-                                    json={"email": email.strip(), "mot_de_passe": password},
-                                    timeout=8
-                                )
-                                if response.status_code == 200:
-                                    user_data = response.json()
-                                    role = str(user_data.get("role", "")).strip().lower()
-                                    destination = ROLE_PAGES.get(role)
-
-                                    if destination:
-                                        st.session_state["logged_in"] = True
-                                        st.session_state["user_id"] = user_data["id"]
-                                        st.session_state["email"] = user_data["email"]
-                                        st.session_state["name"] = user_data["nom_complet"]
-                                        st.session_state["role"] = role
-                                        st.switch_page(destination)
-                                    else:
-                                        st.error("Rôle utilisateur non reconnu.")
-                                else:
-                                    st.error("Identifiants invalides.")
-                            except Exception:
-                                st.error("Impossible de contacter l'API. Assurez-vous qu'elle est démarrée (`uvicorn api:app --reload`).")
+                            tenter_connexion(email, password)
 
         with tab_login_demo:
             st.info("💡 Sélectionnez un profil préconfiguré pour explorer immédiatement les espaces du système :")
             
-            for label, acc in DEMO_ACCOUNTS.items():
+            for label, demo_email in DEMO_ACCOUNTS.items():
                 col_d_info, col_d_btn = st.columns([2.5, 1.2])
                 with col_d_info:
-                    render_clean_html(f"<b>{label}</b><br><span style='color:#94A3B8;font-size:0.8rem;'>{acc['email']}</span>")
+                    render_clean_html(f"<b>{label}</b><br><span style='color:#94A3B8;font-size:0.8rem;'>{demo_email}</span>")
                 with col_d_btn:
-                    if st.button("Entrer", key=f"demo_{acc['role']}", use_container_width=True):
-                        st.session_state["logged_in"] = True
-                        st.session_state["user_id"] = acc["id"]
-                        st.session_state["email"] = acc["email"]
-                        st.session_state["name"] = acc["name"]
-                        st.session_state["role"] = acc["role"]
-                        dest = ROLE_PAGES.get(acc["role"])
-                        if dest:
-                            st.switch_page(dest)
+                    if st.button("Entrer", key=f"demo_{demo_email}", width="stretch"):
+                        tenter_connexion(demo_email, DEMO_PASSWORD)
                 render_clean_html("<div style='height:1px;background:rgba(255,255,255,0.06);margin:6px 0 10px;'></div>")
 
-        if st.button("← Retour à l'accueil public", use_container_width=True):
+        if st.button("← Retour à l'accueil public", width="stretch"):
             st.session_state["show_login"] = False
             st.rerun()
 
@@ -168,7 +150,7 @@ render_clean_html("""
 <span class="pulse-dot"></span>
 <span class="glow-badge">SYSTÈME D'INFORMATION HOSPITALIER v2.0 • IA CONNECTÉE</span>
 </div>
-<div style="font-size:0.8rem;color:#38BDF8;font-weight:600;letter-spacing:0.05em;">ANALYTIQUE EN TEMPS RÉEL • MAHIDA, TUNISIE</div>
+<div style="font-size:0.8rem;color:#38BDF8;font-weight:600;letter-spacing:0.05em;">ANALYTIQUE EN TEMPS RÉEL • MAHDIA, TUNISIE</div>
 </div>
 <div style="display:flex;align-items:flex-start;gap:24px;flex-wrap:wrap;">
 <div style="flex:1;min-width:320px;">
@@ -182,11 +164,17 @@ render_clean_html("""
 # Barre d'actions rapides sous le Hero
 c_hero_btn1, c_hero_btn2, c_hero_stat = st.columns([1.2, 1.2, 2.6])
 with c_hero_btn1:
-    if st.button("🔐 Accéder à mon Espace", type="primary", use_container_width=True):
+    if st.button("🔐 Accéder à mon Espace", type="primary", width="stretch"):
+        if MY_PAGE:
+            st.switch_page(MY_PAGE)
         st.session_state["show_login"] = True
         st.rerun()
 with c_hero_btn2:
-    if st.button("⚡ Démonstration Immédiate", use_container_width=True):
+    if MY_PAGE:
+        if st.button("🚪 Se déconnecter", width="stretch"):
+            logout()
+            st.rerun()
+    elif st.button("⚡ Démonstration Immédiate", width="stretch"):
         st.session_state["show_login"] = True
         st.rerun()
 with c_hero_stat:
@@ -298,7 +286,7 @@ with tab_demo_ia:
     with col_gauge:
         st.plotly_chart(
             create_ai_risk_gauge(simulated_prob, title="Indice de Risque Prédit", disease="Hypertension"),
-            use_container_width=True
+            width="stretch"
         )
         
     with col_radar:
@@ -310,7 +298,7 @@ with tab_demo_ia:
                 "IMC": demo_bmi,
                 "Saturation O2": 98
             }, title="Radar Comparatif vs Norme Médicale"),
-            use_container_width=True
+            width="stretch"
         )
 
 with tab_demo_flux:
@@ -322,7 +310,7 @@ jusqu'aux consultations spécialisées, examens complémentaires, hospitalisatio
 """)
     st.plotly_chart(
         create_patient_flow_sankey("Trajectoire & Flux des Patients (Clinique Santé+)"),
-        use_container_width=True
+        width="stretch"
     )
 
 render_clean_html("<div style='height:30px;'></div>")
